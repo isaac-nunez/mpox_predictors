@@ -1,0 +1,923 @@
+---
+title: "mpox_t_neg_logreg"
+author: "isaac núñez"
+date: "13/3/2023"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r first chunk, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/isaac/OneDrive/Documentos/Protocolos_de_investigacion/MONKEYPOX/MONKEYPOX V1/Test negative mpox/mpox_t_neg")
+
+library(tidyverse); library(lubridate); library(kableExtra); library(rms); library(readxl); library(stringr);library(dplyr);library(flextable);library(circlize);
+library(patchwork);library(rgdal);library(DescTools)
+library(CalibrationCurves); library(boot)
+
+Sys.setlocale( category = "LC_ALL", locale = "english" )
+
+load("mpox_base_final.Rda")
+#Se carga con el nombre mpx_vf
+```
+
+
+```{r preparación regresión logística, include = F}
+mpx_vf <- filter(mpx_vf, diag_final==2|diag_final==3) %>% 
+        mutate(orient_sex_binaria=ifelse(orient_sex=="hsh", T, F),
+               orient_sex_binaria=ifelse(is.na(orient_sex_binaria), F, orient_sex_binaria),
+               mec_transm_binario=ifelse(mec_transm=="Sexual", T, F),
+               sintoma_inicial=case_when(fever_first==T~"fever",
+                                         other_symptoms_first==T~"other symptoms",
+                                         rash_first==T~"rash",
+                                         rash_and_fever==T~"rash and fever",
+                                         other_symptoms_and_fever==T~"other symptoms and fever",
+                                         other_symptoms_and_rash==T~"other symptoms and rash",
+                                         other_symptoms_and_rash_and_fever==T~"other symptoms and rash and fever"
+                                         ),
+               linf_mandibula=ifelse(is.na(linf_mandibula), F, linf_mandibula),
+                                     linf_retroauriculares=ifelse(is.na(linf_retroauriculares), F, linf_retroauriculares)
+                                                                  )
+```
+
+
+```{r fitrado de base según msm o no msm, include = F}
+#En este chunk filtro la base según el subgrupo en el cual quiero calcular las cosas
+
+mpx_vf <- filter(mpx_vf,
+                 orient_sex!="hsh")
+
+
+set.seed(12345)
+
+ind <- sample(c(0,1), nrow(mpx_vf), replace = T, prob= c(0.7, 0.3))
+
+train <- mpx_vf[ind==1,]
+test <- mpx_vf[ind==1,]
+```
+
+```{r funcion de regresion logistica univariada, include = F}
+
+reg_log_mpox <- function(x){
+        
+                mymodel_mpox_uni<-  glm(diag_final==2 ~ mpx_vf[,x][[1]],
+                                    data = mpx_vf, family = 'binomial')
+                
+                assign(str_c("uni_", x),tibble(desenlace="Mpox",
+                       predictor=x,
+                       tipo_regresion="uni",
+                       point_est=round(exp(coef(mymodel_mpox_uni)),2)[2],
+                       lower_ci=round(exp(coef(mymodel_mpox_uni)-(1.96*0.05)),2)[2],
+                       upper_ci=round(exp(coef(mymodel_mpox_uni)+(1.96*0.05)),2)[2],
+                       full_or=str_c(point_est, " (", lower_ci, "-", upper_ci, ")")), envir = .GlobalEnv)
+}
+```
+
+```{r eda tabla 1, eval=F, include = F}
+orient<-  glm(diag_final==2 ~ orient_sex,
+                                    data = mpx_vf, family = 'binomial')
+
+severidad <- tibble(predictor=c("hsh", "lesbian", "unspecified", "other"),
+                       point_est=c(round(exp(coef(orient)),2)[2],
+                                   round(exp(coef(orient)),2)[3],
+                                   round(exp(coef(orient)),2)[4],
+                                   round(exp(coef(orient)),2)[5]),
+                       lower_ci=c(round(exp(coef(orient)-(1.96*0.05)),2)[2],
+                                  round(exp(coef(orient)-(1.96*0.05)),2)[3],
+                    round(exp(coef(orient)-(1.96*0.05)),2)[4],
+round(exp(coef(orient)-(1.96*0.05)),2)[5]),
+                       upper_ci=c(round(exp(coef(orient)+(1.96*0.05)),2)[2],
+                                  round(exp(coef(orient)+(1.96*0.05)),2)[3],
+                                  round(exp(coef(orient)+(1.96*0.05)),2)[4],
+                                  round(exp(coef(orient)+(1.96*0.05)),2)[5]),
+                       full_or=str_c(point_est, " (", lower_ci, "-", upper_ci, ")"))
+
+
+```
+
+```{r table 1 ORs, include = F}
+
+table_1 <- data.frame(
+  variables=c("Number", "Age", "Biological sex:","Female", "Male", 
+              "Sexual orientation",  "-Heterosexual","-MSM", "-Lesbian","-Other",
+              "-Not specified",
+              "Mexican nationals", 
+              "Recent international travel","Health worker",
+              "Sex worker", "Prisoner",
+              "Possible transmission mechanism:",
+              "-Sexual contact", "-Non-sexual contact",
+              "-Healthcare (patient contact)", "Healthcare (laboratory exposure)",
+              "-Fomites","-Animal","-Other", "-Unknown",
+              "Number of self-reported contacts",
+              "Comorbidities:",
+              "-Diabetes","-Hypertension", "-Cancer",
+              "Sexually transmitted infections:",
+              "Hepatitis C","Syphilis","Chancroid", "Gonorrhea", "Chlamydia",
+              "Genital herpes", "HIV",
+              "CD4 cell count", "CD4 <200","N and % with CD4 count",
+              "Required hospitalization", "Required intensive care",
+              "Died"),
+  uni_full_or=c("", "", "",
+                "Ref","",
+                #reg_log_mpox("sexo")$full_or,
+                "",
+                "Ref",rep("", times=4),
+                #severidad$full_or[1],
+                #severidad$full_or[2],
+                #severidad$full_or[3],
+                #severidad$full_or[4],
+                reg_log_mpox("mexican_national")$full_or,
+                reg_log_mpox("international_travel")$full_or,
+                reg_log_mpox("health_worker")$full_or,
+                reg_log_mpox("sex_worker")$full_or,
+                reg_log_mpox("prisoner")$full_or,
+                "",
+                reg_log_mpox("mec_transm_binario")$full_or,
+                rep("", times=9),
+                reg_log_mpox("comor_diabetes")$full_or,
+                reg_log_mpox("comor_hipertension")$full_or,
+                reg_log_mpox("comor_neoplasias")$full_or,
+                "",
+                reg_log_mpox("comor_hepatitisc")$full_or,
+                reg_log_mpox("comor_sifilis")$full_or,
+                reg_log_mpox("comor_chancroide")$full_or,
+                reg_log_mpox("comor_gonorrea")$full_or,
+                reg_log_mpox("comor_clamidia")$full_or,
+                reg_log_mpox("comor_herpes")$full_or,
+                reg_log_mpox("comor_vih")$full_or,
+                rep("", times=3),
+                reg_log_mpox("hospitalizado")$full_or,
+                reg_log_mpox("cuid_intensiv")$full_or,
+                reg_log_mpox("defuncion")$full_or)
+)
+                
+               
+
+
+```
+
+```{r print table 1, include = T}
+
+flextable(table_1)
+```
+
+```{r eda tabla 2, include = F}
+sev<-  glm(diag_final==2 ~ mpx_vf[,"severidad"][[1]],
+                                    data = mpx_vf, family = 'binomial')
+
+severidad <- tibble(predictor=c("moderada", "severa"),
+                       point_est=c(round(exp(coef(sev)),2)[2],
+                                   round(exp(coef(sev)),2)[3]),
+                       lower_ci=c(round(exp(coef(sev)-(1.96*0.05)),2)[2],
+                                  round(exp(coef(sev)-(1.96*0.05)),2)[3]),
+                       upper_ci=c(round(exp(coef(sev)+(1.96*0.05)),2)[2],
+                                  round(exp(coef(sev)+(1.96*0.05)),2)[3]),
+                       full_or=str_c(point_est, " (", lower_ci, "-", upper_ci, ")"))
+
+
+debut<-  glm(diag_final==2 ~ mpx_vf[,"sintoma_inicial"][[1]],
+                                    data = mpx_vf, family = 'binomial')
+
+sintoma_debut <- tibble(predictor=c("other", 
+                                    "other and fever",
+                                    "other and rash", 
+                                    "other and rash and fever",
+                                    "rash",
+                                    "rash and fever"),
+                       point_est=round(exp(coef(debut)),2)[2:7],
+                       lower_ci=round(exp(coef(debut)-(1.96*0.05)),2)[2:7],
+                       upper_ci=round(exp(coef(debut)+(1.96*0.05)),2)[2:7],
+                       full_or=str_c(point_est, " (", lower_ci, "-", upper_ci, ")"))
+
+
+#Debut symptom
+distrib_df<-  glm(diag_final==2 ~ distrib_exa,
+                                    data = mpx_vf, family = 'binomial')
+
+spread_pat <- tibble(predictor=c("centrifuga", "centripeta", "no especificada", "otra",
+                                    "simultanea"),
+                       point_est=c(round(exp(coef(distrib_df)),2)[2],
+                                   round(exp(coef(distrib_df)),2)[3],
+                                   round(exp(coef(distrib_df)),2)[4],
+                                   round(exp(coef(distrib_df)),2)[5],
+                                   round(exp(coef(distrib_df)),2)[6]
+                                   ),
+                       lower_ci=c(round(exp(coef(distrib_df)-(1.96*0.05)),2)[2],
+                                  round(exp(coef(distrib_df)-(1.96*0.05)),2)[3],
+                                  round(exp(coef(distrib_df)-(1.96*0.05)),2)[4],
+                                  round(exp(coef(distrib_df)-(1.96*0.05)),2)[5],
+                                  round(exp(coef(distrib_df)-(1.96*0.05)),2)[6]
+                                  ),
+                       upper_ci=c(round(exp(coef(distrib_df)+(1.96*0.05)),2)[2],
+                                  round(exp(coef(distrib_df)+(1.96*0.05)),2)[3],
+                                  round(exp(coef(distrib_df)+(1.96*0.05)),2)[4],
+                                  round(exp(coef(distrib_df)+(1.96*0.05)),2)[5],
+                                  round(exp(coef(distrib_df)+(1.96*0.05)),2)[6]
+                                  ),
+                       full_or=str_c(point_est, " (", lower_ci, "-", upper_ci, ")"))
+```
+
+```{r table 2 ORs, include = F}
+
+table_2 <- data.frame(
+  variables=c("Number", "Infection severity:","-Mild","-Moderate","-Severe",
+              "Debut clinical manifestation:", 
+              "-Rash","-Fever", "-Other symptoms",
+              "-Simultaneous rash and fever","-Simultaneous rash and other symptoms",
+              "-Simultaneous fever and other symptoms", 
+              "-Simultaneous rash, fever, and other symptoms",
+              "Rash", "Lymphadenopathies","Fever","Shivers", "Diaphoresis", 
+              "Headache", "Conjunctivitis", "Rinorrhea", "Otalgia", "Cough",
+              "Odynophagia", "Nausea","Vomit", "Artralgias", "Mialgias",
+              "Lumbalgia","Diarrhea", "Proctitis" , "Urethritis"),
+  uni_full_or=c("", "", 
+                "Ref",
+                as.character(severidad[1, "full_or"]),
+                as.character(severidad[2, "full_or"]),
+                "",
+                as.character(sintoma_debut[5, "full_or"]),
+                "Ref",
+                as.character(sintoma_debut[1, "full_or"]),
+                "NA",
+                as.character(sintoma_debut[3, "full_or"]),
+                as.character(sintoma_debut[2, "full_or"]),
+                as.character(sintoma_debut[4, "full_or"]),
+                "-",
+                reg_log_mpox("lymph_nodes")$full_or,
+                reg_log_mpox("fiebre")$full_or,
+                reg_log_mpox("escalofrios")$full_or,
+                reg_log_mpox("diaforesis")$full_or,
+                reg_log_mpox("cefalea")$full_or,
+                reg_log_mpox("conjuntivitis")$full_or,
+                reg_log_mpox("rinorrea")$full_or,
+                reg_log_mpox("otalgia")$full_or,
+                reg_log_mpox("tos")$full_or,
+                reg_log_mpox("odinofagia")$full_or,
+                reg_log_mpox("nausea")$full_or,
+                reg_log_mpox("vomito")$full_or,
+                reg_log_mpox("artralgias")$full_or,
+                reg_log_mpox("mialgias")$full_or,
+                reg_log_mpox("lumbalgia")$full_or,
+                reg_log_mpox("diarrea")$full_or,
+                reg_log_mpox("proctitis")$full_or,
+                reg_log_mpox("uretritis")$full_or
+                )
+)
+
+```
+
+```{r print table 2, include =T}
+
+flextable(table_2)
+```
+
+```{r eda para tabla 3, include = F}
+extension<-  glm(diag_final==2 ~ mpx_vf[,"extension_rash"][[1]],
+                                    data = mpx_vf, family = 'binomial')
+
+extension_rash <- tibble(predictor=c("limitado", "generalizado"),
+                       point_est=c(round(exp(coef(sev)),2)[2],
+                                   round(exp(coef(sev)),2)[3]),
+                       lower_ci=c(round(exp(coef(sev)-(1.96*0.05)),2)[2],
+                                  round(exp(coef(sev)-(1.96*0.05)),2)[3]),
+                       upper_ci=c(round(exp(coef(sev)+(1.96*0.05)),2)[2],
+                                  round(exp(coef(sev)+(1.96*0.05)),2)[3]),
+                       full_or=str_c(point_est, " (", lower_ci, "-", upper_ci, ")"))
+```
+
+```{r table 3 ORs, include = F}
+
+table_3 <- data.frame(
+  variables=c("Number", "Painful lesions", "Bleeding lesions",
+              "Rash extension:","-Limited", "-Diseminated", "-Generalized",
+              "Rash spread pattern:", 
+              "-Cephalocaudal", "-Centrifugal", "-Centripetal", "-Simultaneous", 
+              "-Other", "-Unspecified",
+              "Had lesion type:", 
+              "-Maculae", "-Papulae", "-Vesicle","-Pustule", "-Scab",
+              "Number of body areas with skin lesions",
+              "Rash affected the following area:",
+              "-Head", "-Face", "Mouth", "-Neck", "-Chest", "-Arms", "-Legs", "-Palms",
+              "-Soles","-Abdomen","-Back", "-Anogenital area",
+              "Lymphadenopathies", "Lymphadenopathies in the following regions:",
+              "-Cervical", "-Submandibular", "-Retroauricular", "-Axilar", "-Inguinal"
+              ),
+  uni_full_or=c("", 
+                reg_log_mpox("dolorosas")$full_or,
+                reg_log_mpox("sangrantes")$full_or,
+                "",
+                as.character(extension_rash[1, "full_or"]),
+                "Ref",
+                as.character(extension_rash[2, "full_or"]),
+                "",
+                rep("", 7),#no haré el análisis para distribución de rash
+                reg_log_mpox("exa_macula")$full_or,
+                reg_log_mpox("exa_papula")$full_or,
+                reg_log_mpox("exa_vesicula")$full_or,
+                reg_log_mpox("exa_pustula")$full_or,
+                reg_log_mpox("exa_costra")$full_or,
+                "",
+                "",
+                reg_log_mpox("lexan_cabeza")$full_or,
+                reg_log_mpox("lexan_cara")$full_or,
+                reg_log_mpox("lexan_muc_oral")$full_or,
+                reg_log_mpox("lexan_cuello")$full_or,
+                reg_log_mpox("lexan_torax")$full_or,
+                reg_log_mpox("lexan_miem_sup")$full_or,
+                reg_log_mpox("lexan_miem_inf")$full_or,
+                reg_log_mpox("lexan_palmas")$full_or,
+                reg_log_mpox("lexan_plantas")$full_or,
+                reg_log_mpox("lexan_abdomen")$full_or,
+                reg_log_mpox("lexan_espalda")$full_or,
+                reg_log_mpox("lexan_anogenital")$full_or,
+                reg_log_mpox("lymph_nodes")$full_or,
+                "",
+                reg_log_mpox("linf_cervical")$full_or,
+                reg_log_mpox("linf_mandibula")$full_or,
+                reg_log_mpox("linf_retroauriculares")$full_or,
+                reg_log_mpox("linf_axilar")$full_or,
+                reg_log_mpox("linf_inguinal")$full_or
+                )
+)
+
+```
+
+```{r print table 3, include =T}
+
+flextable(table_3)
+```
+
+
+```{r multivariable akaike criterion calculation, include = F}
+predictor_variables <- c("orient_sex_binaria","comor_vih","proctitis","diaforesis","linf_inguinal","linf_retroauriculares","lexan_anogenital","dolorosas","uretritis",
+                                     "exa_pustula","enf_severa")
+
+variables_tabla_supp <- data.frame(variable_removida=c("ninguna","orient_sex_binaria","comor_vih","proctitis","diaforesis","linf_inguinal","linf_retroauriculares","lexan_anogenital","dolorosas","uretritis",
+                                     "exa_pustula","enf_severa"))
+#Modelo completo
+mymodel_mpox_1<-  glm(diag_final==2 ~orient_sex_binaria+ comor_vih+proctitis+diaforesis+linf_inguinal+linf_retroauriculares+lexan_anogenital+dolorosas+uretritis+exa_pustula+enf_severa,
+                      data = mpx_vf, family = 'binomial')
+base_1 <- data.frame(variable_removida="ninguna",
+                     akaike_value=round(AIC(mymodel_mpox_1)),
+                     c_statistic=round(Cstat(mymodel_mpox_1),2))
+#With this code I compute the akaike criterion for while removing every variable for the first time
+for(i in seq_along(predictor_variables)){
+
+        placeholder <- predictor_variables[-i]
+        mymodel_mpox_aic<-  glm(diag_final==2 ~ mpx_vf[,placeholder[1]][[1]]+mpx_vf[,placeholder[2]][[1]]+mpx_vf[,placeholder[3]][[1]]+
+                                        mpx_vf[,placeholder[4]][[1]]+mpx_vf[,placeholder[5]][[1]]+mpx_vf[,placeholder[6]][[1]]+
+                                        mpx_vf[,placeholder[7]][[1]]+mpx_vf[,placeholder[8]][[1]]+mpx_vf[,placeholder[9]][[1]]+mpx_vf[,placeholder[10]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        if( i==1){
+
+                        
+        first_akaike_df <-  rbind(base_1,data.frame(
+                                                    variable_removida=predictor_variables[i],
+                    akaike_value=round(AIC(mymodel_mpox_aic)),
+                    c_statistic=round(Cstat(mymodel_mpox_aic),2)))       
+                
+        }else{
+         
+        first_akaike_df <-  rbind(first_akaike_df,
+                           data.frame(
+                                      variable_removida=predictor_variables[i],
+                    akaike_value=round(AIC(mymodel_mpox_aic)),
+                    c_statistic=round(Cstat(mymodel_mpox_aic),2)))          
+        }        
+}
+
+#With this code I compute the akaike criterion for while removing every variable for the second time. We removed painful lesions.
+predictor_variables_2 <- c("orient_sex_binaria","comor_vih","proctitis","diaforesis","linf_inguinal","lexan_anogenital","linf_retroauriculares","uretritis",
+                                     "exa_pustula","enf_severa")
+
+#Modelo completo
+mymodel_mpox_2<-  glm(diag_final==2 ~ mpx_vf[,predictor_variables_2[1]][[1]]+mpx_vf[,predictor_variables_2[2]][[1]]+mpx_vf[,predictor_variables_2[3]][[1]]+
+                              mpx_vf[,predictor_variables_2[4]][[1]]+mpx_vf[,predictor_variables_2[5]][[1]]+mpx_vf[,predictor_variables_2[6]][[1]]+
+                              mpx_vf[,predictor_variables_2[7]][[1]]+mpx_vf[,predictor_variables_2[8]][[1]]+mpx_vf[,predictor_variables_2[9]][[1]]+mpx_vf[,predictor_variables_2[10]][[1]],
+                      data = mpx_vf, family = 'binomial')
+base_2 <- data.frame(variable_removida="ninguna",
+                     akaike_value=AIC(mymodel_mpox_2),
+                     c_statistic=Cstat(mymodel_mpox_2))
+        
+        
+for(i in seq_along(predictor_variables_2)){
+        placeholder <- predictor_variables_2[-i]
+        mymodel_mpox_aic<-  glm(diag_final==2 ~ mpx_vf[,placeholder[1]][[1]]+mpx_vf[,placeholder[2]][[1]]+mpx_vf[,placeholder[3]][[1]]+
+                                        mpx_vf[,placeholder[4]][[1]]+mpx_vf[,placeholder[5]][[1]]+mpx_vf[,placeholder[6]][[1]]+
+                                        mpx_vf[,placeholder[7]][[1]]+mpx_vf[,placeholder[8]][[1]]+mpx_vf[,placeholder[9]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        if( i==1){
+                
+        second_akaike_df <-  rbind(base_2,data.frame(variable_removida=predictor_variables_2[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))       
+                
+        }else{
+         
+        second_akaike_df <-  rbind(second_akaike_df,
+                           data.frame(variable_removida=predictor_variables_2[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))          
+        }        
+}
+
+
+#With this code I compute the akaike criterion for while removing every variable for the third time. We removed retroauricular lymph nodes
+predictor_variables_3 <- c("orient_sex_binaria","comor_vih","diaforesis","linf_inguinal","lexan_anogenital","proctitis","uretritis",
+                                     "exa_pustula","enf_severa")
+
+
+#Modelo completo
+        mymodel_mpox_3<-  glm(diag_final==2 ~ mpx_vf[,predictor_variables_3[1]][[1]]+mpx_vf[,predictor_variables_3[2]][[1]]+mpx_vf[,predictor_variables_3[3]][[1]]+
+                                        mpx_vf[,predictor_variables_3[4]][[1]]+mpx_vf[,predictor_variables_3[5]][[1]]+mpx_vf[,predictor_variables_3[6]][[1]]+
+                                        mpx_vf[,predictor_variables_3[7]][[1]]+mpx_vf[,predictor_variables_3[8]][[1]]+
+                                      mpx_vf[,predictor_variables_3[9]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        base_3 <- data.frame(variable_removida="ninguna",
+                             akaike_value=AIC(mymodel_mpox_3),
+                             c_statistic=Cstat(mymodel_mpox_3))
+        
+        
+for(i in seq_along(predictor_variables_3)){
+        placeholder <- predictor_variables_3[-i]
+        mymodel_mpox_aic<-  glm(diag_final==2 ~ mpx_vf[,placeholder[1]][[1]]+mpx_vf[,placeholder[2]][[1]]+mpx_vf[,placeholder[3]][[1]]+
+                                        mpx_vf[,placeholder[4]][[1]]+mpx_vf[,placeholder[5]][[1]]+mpx_vf[,placeholder[6]][[1]]+
+                                        mpx_vf[,placeholder[7]][[1]]+mpx_vf[,placeholder[8]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        if( i==1){
+                
+        third_akaike_df <-  rbind(base_3,data.frame(variable_removida=predictor_variables_3[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))       
+                
+        }else{
+         
+        third_akaike_df <-  rbind(third_akaike_df,
+                           data.frame(variable_removida=predictor_variables_3[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))          
+        }        
+}
+
+        
+#With this code I compute the akaike criterion for while removing every variable for the second time. We removed urethritis
+predictor_variables_4 <- c("orient_sex_binaria","comor_vih","diaforesis","linf_inguinal","lexan_anogenital","proctitis",
+                                     "exa_pustula","enf_severa")
+
+
+#Modelo completo
+        mymodel_mpox_4<-  glm(diag_final==2 ~ mpx_vf[,predictor_variables_4[1]][[1]]+mpx_vf[,predictor_variables_4[2]][[1]]+mpx_vf[,predictor_variables_4[3]][[1]]+
+                                        mpx_vf[,predictor_variables_4[4]][[1]]+mpx_vf[,predictor_variables_4[5]][[1]]+mpx_vf[,predictor_variables_4[6]][[1]]+
+                                        mpx_vf[,predictor_variables_4[7]][[1]]+
+                                      mpx_vf[,predictor_variables_4[8]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        base_4 <- data.frame(variable_removida="ninguna",
+                             akaike_value=AIC(mymodel_mpox_4),
+                             c_statistic=Cstat(mymodel_mpox_4))
+
+for(i in seq_along(predictor_variables_4)){
+        placeholder <- predictor_variables_4[-i]
+        mymodel_mpox_aic<-  glm(diag_final==2 ~ mpx_vf[,placeholder[1]][[1]]+mpx_vf[,placeholder[2]][[1]]+mpx_vf[,placeholder[3]][[1]]+
+                                        mpx_vf[,placeholder[4]][[1]]+mpx_vf[,placeholder[5]][[1]]+mpx_vf[,placeholder[6]][[1]]+mpx_vf[,placeholder[7]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        if( i==1){
+                
+        fourth_akaike_df <-  rbind(base_4,data.frame(variable_removida=predictor_variables_4[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))       
+                
+        }else{
+         
+        fourth_akaike_df <-  rbind(fourth_akaike_df,
+                           data.frame(variable_removida=predictor_variables_4[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))          
+        }        
+}
+
+
+        #With this code I compute the akaike criterion for while removing every variable for the second time. We removed retroauricular lymph nodes
+predictor_variables_5 <- c("orient_sex_binaria","comor_vih","proctitis","linf_inguinal","lexan_anogenital",
+                                     "exa_pustula","enf_severa")
+
+
+#Modelo completo
+        mymodel_mpox_5<-  glm(diag_final==2 ~ mpx_vf[,predictor_variables_5[1]][[1]]+mpx_vf[,predictor_variables_5[2]][[1]]+mpx_vf[,predictor_variables_5[3]][[1]]+
+                                        mpx_vf[,predictor_variables_5[4]][[1]]+mpx_vf[,predictor_variables_5[5]][[1]]+mpx_vf[,predictor_variables_5[6]][[1]]+mpx_vf[,predictor_variables_5[7]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        base_5 <- data.frame(variable_removida="ninguna",
+                             akaike_value=AIC(mymodel_mpox_5),
+                             c_statistic=Cstat(mymodel_mpox_5))
+
+for(i in seq_along(predictor_variables_5)){
+        placeholder <- predictor_variables_5[-i]
+        mymodel_mpox_aic<-  glm(diag_final==2 ~ mpx_vf[,placeholder[1]][[1]]+mpx_vf[,placeholder[2]][[1]]+mpx_vf[,placeholder[3]][[1]]+
+                                        mpx_vf[,placeholder[4]][[1]]+mpx_vf[,placeholder[5]][[1]]+mpx_vf[,placeholder[6]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        if( i==1){
+                
+        fifth_akaike_df <-  rbind(base_5,data.frame(variable_removida=predictor_variables_5[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))       
+                
+        }else{
+         
+        fifth_akaike_df <-  rbind(fifth_akaike_df,
+                           data.frame(variable_removida=predictor_variables_5[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))          
+        }        
+}
+
+
+         #With this code I compute the akaike criterion for while removing every variable for the second time. We removed severe disease        
+predictor_variables_6 <- c("orient_sex_binaria","comor_vih","proctitis","linf_inguinal","lexan_anogenital",
+                                     "exa_pustula")
+
+
+#Modelo completo
+        mymodel_mpox_6<-  glm(diag_final==2 ~ mpx_vf[,predictor_variables_6[1]][[1]]+mpx_vf[,predictor_variables_6[2]][[1]]+mpx_vf[,predictor_variables_6[3]][[1]]+
+                                        mpx_vf[,predictor_variables_6[4]][[1]]+mpx_vf[,predictor_variables_6[5]][[1]]+
+                                      mpx_vf[,predictor_variables_6[6]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        base_6 <- data.frame(variable_removida="ninguna",
+                             akaike_value=AIC(mymodel_mpox_6),
+                                     c_statistic=Cstat(mymodel_mpox_6))
+
+for(i in seq_along(predictor_variables_6)){
+        placeholder <- predictor_variables_6[-i]
+        mymodel_mpox_aic<-  glm(diag_final==2 ~ mpx_vf[,placeholder[1]][[1]]+mpx_vf[,placeholder[2]][[1]]+mpx_vf[,placeholder[3]][[1]]+
+                                        mpx_vf[,placeholder[4]][[1]]+
+                                        mpx_vf[,placeholder[5]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        if( i==1){
+                
+        sixth_akaike_df <-  rbind(base_6,data.frame(variable_removida=predictor_variables_6[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))       
+                
+        }else{
+         
+        sixth_akaike_df <-  rbind(sixth_akaike_df,
+                           data.frame(variable_removida=predictor_variables_6[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))          
+        }        
+}
+        
+        #With this code I compute the akaike criterion for while removing every variable. We removed diaforesis
+predictor_variables_7 <- c("orient_sex_binaria","comor_vih","linf_inguinal","lexan_anogenital",
+                                     "exa_pustula")
+
+
+#Modelo completo
+        mymodel_mpox_7<-  glm(diag_final==2 ~ mpx_vf[,predictor_variables_7[1]][[1]]+mpx_vf[,predictor_variables_7[2]][[1]]+mpx_vf[,predictor_variables_7[3]][[1]]+
+                                        mpx_vf[,predictor_variables_7[4]][[1]]+
+                                      mpx_vf[,predictor_variables_7[5]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        base_7 <- data.frame(variable_removida="ninguna",
+                             akaike_value=AIC(mymodel_mpox_7),
+                                     c_statistic=Cstat(mymodel_mpox_7))
+
+for(i in seq_along(predictor_variables_7)){
+        placeholder <- predictor_variables_7[-i]
+        mymodel_mpox_aic<-  glm(diag_final==2 ~ mpx_vf[,placeholder[1]][[1]]+mpx_vf[,placeholder[2]][[1]]+mpx_vf[,placeholder[3]][[1]]+mpx_vf[,placeholder[4]][[1]],
+                                    data = mpx_vf, family = 'binomial')
+        
+        if( i==1){
+                
+        seventh_akaike_df <-  rbind(base_7,data.frame(variable_removida=predictor_variables_7[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))       
+                
+        }else{
+         
+        seventh_akaike_df <-  rbind(seventh_akaike_df,
+                           data.frame(variable_removida=predictor_variables_7[i],
+                    akaike_value=AIC(mymodel_mpox_aic),
+                    c_statistic=Cstat(mymodel_mpox_aic)))          
+        }        
+}
+```
+
+
+```{r function for the order of the variables, include = F}
+ak_function <- function(x,y){
+        placeholder <- right_join(x,
+                     variables_tabla_supp,by="variable_removida") %>% 
+        mutate(num_modelo=y,
+               c_statistic=round(c_statistic,2),
+               akaike_value=round(akaike_value))
+        
+        placeholder$variable_removida <- placeholder[match(variables_tabla_supp$variable_removida,
+                                   placeholder$variable_removida),]
+        assign(str_c("ak_df_", y), placeholder, envir = .GlobalEnv)
+        
+}        
+ 
+
+ak_function(first_akaike_df,1)
+ak_function(second_akaike_df,2)
+ak_function(third_akaike_df,3)
+ak_function(fourth_akaike_df,4)
+ak_function(fifth_akaike_df,5)
+ak_function(sixth_akaike_df,6)
+ak_function(seventh_akaike_df,7)
+
+
+
+```
+
+```{r table variable selection supplement main model, include = F}
+
+supp_table_1 <- data.frame(
+        variable=variables_tabla_supp,
+        aic_1=ak_df_1[,1]$akaike_value,
+        c_1=ak_df_1[,1]$c_statistic,
+        aic_2=ak_df_2[,1]$akaike_value,
+        c_2=ak_df_2[,1]$c_statistic,
+        aic_3=ak_df_3[,1]$akaike_value,
+        c_3=ak_df_3[,1]$c_statistic,
+        aic_4=ak_df_4[,1]$akaike_value,
+        c_4=ak_df_4[,1]$c_statistic,
+        aic_5=ak_df_5[,1]$akaike_value,
+        c_5=ak_df_5[,1]$c_statistic,
+        aic_6=ak_df_6[,1]$akaike_value,
+        c_6=ak_df_6[,1]$c_statistic,
+        aic_7=ak_df_7[,1]$akaike_value,
+        c_7=ak_df_7[,1]$c_statistic
+)
+
+```
+
+```{r supp table 1 print, eval=T, include = T}
+
+
+flextable(supp_table_1)
+```
+
+```{r bases para nomograma y validacion, include = F}
+mpx_vf_mod <- select(mpx_vf,folio,
+                     diag_final,orient_sex_binaria,comor_vih,proctitis,diaforesis,linf_inguinal,linf_retroauriculares,lexan_anogenital,
+                     dolorosas,uretritis,exa_pustula,enf_severa,mec_transm_binario) %>% 
+        mutate(mpox=ifelse(diag_final==2, T, F))
+
+mpx_vf_msm <- filter(mpx_vf, orient_sex_binaria==T) %>% 
+        select(folio,
+                     diag_final,comor_vih,proctitis,diaforesis,linf_inguinal,linf_retroauriculares,lexan_anogenital,
+                     dolorosas,uretritis,exa_pustula,enf_severa) %>% 
+        mutate(mpox=ifelse(diag_final==2, T, F))
+
+mpx_vf_not_msm <- filter(mpx_vf, orient_sex_binaria==F) %>% 
+        select(folio,
+                     diag_final,comor_vih,proctitis,diaforesis,linf_inguinal,linf_retroauriculares,lexan_anogenital,
+                     dolorosas,uretritis,exa_pustula,enf_severa) %>% 
+        mutate(mpox=ifelse(diag_final==2, T, F))
+```
+
+```{r nomogram, eval = F}
+
+
+variable_labels <- c(folio="Folio",
+                     diag_final="Final diagnosis",
+                     orient_sex_binaria="MSM",
+                     comor_vih="HIV diagnosis",
+                     proctitis="Proctitis",
+                     diaforesis="Diaphoresis",
+                     linf_inguinal="Inguinal LN",
+                     linf_retroauriculares="Retro-auricular LN",
+                     lexan_anogenital="Anogenital lesions",
+                     dolorosas="Painful lesions",
+                     uretritis="Urethritis",
+                     exa_pustula="Pustules",
+                     enf_severa="Severe disease",
+                     mec_transm_binario="Previous sexual contact",
+                     mpox="Mpox diagnosis"
+                     )
+
+
+label(mpx_vf_mod)=lapply(names(variable_labels),
+function(x)label(mpx_vf_mod[,x])=variable_labels[x])
+
+#Modelo completo
+mymodel_mpox_final<-  lrm(mpox~orient_sex_binaria+ comor_vih+linf_inguinal+lexan_anogenital+exa_pustula+ mec_transm_binario,
+                                    data = mpx_vf_mod)
+
+
+
+mymodel_mpox_final_glm<-  glm(mpox~orient_sex_binaria+ comor_vih+linf_inguinal+lexan_anogenital+exa_pustula,
+                                    data = mpx_vf_mod, family="binomial")
+
+
+
+
+
+ddist <- datadist(mpx_vf_mod)
+options(datadist='ddist')
+
+nom <- nomogram(mymodel_mpox_final, fun=plogis, funlabel="Probability of\nmpox diagnosis", lp=F)
+plot(nom)
+```
+
+```{r calibration with bootstrap full model, eval = F}
+var_label(mpx_vf_mod$folio) <- NULL
+
+
+for(i in 1:200){
+        muestra <- data.frame(folio=as.numeric(sample(mpx_vf_mod$folio, size=nrow(mpx_vf_mod), replace=T)))
+        
+        new_df <- left_join(muestra,mpx_vf_mod, by="folio")
+        
+        predictions <- predict(mymodel_mpox_final_glm, newdata = new_df, type= "response")
+        
+        prediction_df <- data.frame(predictions=predictions,
+                                    outcome=new_df$mpox)
+        
+        
+        calibration_parameters <- val.prob.ci.2(p=prediction_df$predictions,
+                                                y=prediction_df$outcome)
+        
+        if(i==1){
+                calibration_parameters_df <- data.frame(bootstrap_num=i,
+                                                        c_index=calibration_parameters$Cindex[1],
+                                                        intercept=calibration_parameters$Calibration$Intercept[1],
+                                                        slope=calibration_parameters$Calibration$Slope[1])    
+                
+        }else{
+                calibration_parameters_df<- rbind(calibration_parameters_df,
+                                                  data.frame(bootstrap_num=i,
+                                                             c_index=calibration_parameters$Cindex[1],
+                                                             intercept=calibration_parameters$Calibration$Intercept[1],
+                                                             slope=calibration_parameters$Calibration$Slope[1]))
+        }
+}
+
+mean_parameters_bootstrap <- data.frame(c_index=str_c(
+        round(mean(calibration_parameters_df$c_index),2)," (",
+        round(mean(calibration_parameters_df$c_index)-
+                      (sd(calibration_parameters_df$c_index)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$c_index)+
+                      (sd(calibration_parameters_df$c_index)*1.96),2),
+        ")"
+),
+intercept=str_c(
+        round(mean(calibration_parameters_df$intercept),2)," (",
+        round(mean(calibration_parameters_df$intercept)-
+                      (sd(calibration_parameters_df$intercept)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$intercept)+
+                      (sd(calibration_parameters_df$intercept)*1.96),2),
+        ")"
+),
+slope=str_c(
+        round(mean(calibration_parameters_df$slope),2)," (",
+        round(mean(calibration_parameters_df$slope)-
+                      (sd(calibration_parameters_df$slope)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$slope)+
+                      (sd(calibration_parameters_df$slope)*1.96),2),
+        ")"
+)
+)
+
+```
+
+```{r calibration with bootstrap only msm, eval = F}
+
+
+
+for(i in 1:200){
+        muestra <- data.frame(folio=as.numeric(sample(mpx_vf_msm$folio, size=nrow(mpx_vf_msm), replace=T)))
+        
+        new_df <- left_join(muestra,mpx_vf_msm, by="folio")
+        
+        predictions <- predict(mymodel_mpox_final_glm, newdata = new_df, type= "response")
+        
+        prediction_df <- data.frame(predictions=predictions,
+                                    outcome=new_df$mpox)
+        
+        
+        calibration_parameters <- val.prob.ci.2(p=prediction_df$predictions,
+                                                y=prediction_df$outcome)
+        
+        if(i==1){
+                calibration_parameters_df <- data.frame(bootstrap_num=i,
+                                                        c_index=calibration_parameters$Cindex[1],
+                                                        intercept=calibration_parameters$Calibration$Intercept[1],
+                                                        slope=calibration_parameters$Calibration$Slope[1])    
+                
+        }else{
+                calibration_parameters_df<- rbind(calibration_parameters_df,
+                                                  data.frame(bootstrap_num=i,
+                                                             c_index=calibration_parameters$Cindex[1],
+                                                             intercept=calibration_parameters$Calibration$Intercept[1],
+                                                             slope=calibration_parameters$Calibration$Slope[1]))
+        }
+}
+
+mean_parameters_bootstrap <- data.frame(c_index=str_c(
+        round(mean(calibration_parameters_df$c_index),2)," (",
+        round(mean(calibration_parameters_df$c_index)-
+                      (sd(calibration_parameters_df$c_index)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$c_index)+
+                      (sd(calibration_parameters_df$c_index)*1.96),2),
+        ")"
+),
+intercept=str_c(
+        round(mean(calibration_parameters_df$intercept),2)," (",
+        round(mean(calibration_parameters_df$intercept)-
+                      (sd(calibration_parameters_df$intercept)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$intercept)+
+                      (sd(calibration_parameters_df$intercept)*1.96),2),
+        ")"
+),
+slope=str_c(
+        round(mean(calibration_parameters_df$slope),2)," (",
+        round(mean(calibration_parameters_df$slope)-
+                      (sd(calibration_parameters_df$slope)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$slope)+
+                      (sd(calibration_parameters_df$slope)*1.96),2),
+        ")"
+)
+)
+                                    
+
+
+
+
+```
+
+```{r calibration with bootstrap only not msm, eval = F}
+
+for(i in 1:200){
+        muestra <- data.frame(folio=as.numeric(sample(mpx_vf_not_msm$folio, size=nrow(mpx_vf_not_msm), replace=T)))
+        
+        new_df <- left_join(muestra,mpx_vf_not_msm, by="folio")
+        
+        predictions <- predict(mymodel_mpox_final_glm, newdata = new_df, type= "response")
+        
+        prediction_df <- data.frame(predictions=predictions,
+                                    outcome=new_df$mpox)
+        
+        
+        calibration_parameters <- val.prob.ci.2(p=prediction_df$predictions,
+                                                y=prediction_df$outcome)
+        
+        if(i==1){
+                calibration_parameters_df <- data.frame(bootstrap_num=i,
+                                                        c_index=calibration_parameters$Cindex[1],
+                                                        intercept=calibration_parameters$Calibration$Intercept[1],
+                                                        slope=calibration_parameters$Calibration$Slope[1])    
+                
+        }else{
+                calibration_parameters_df<- rbind(calibration_parameters_df,
+                                                  data.frame(bootstrap_num=i,
+                                                             c_index=calibration_parameters$Cindex[1],
+                                                             intercept=calibration_parameters$Calibration$Intercept[1],
+                                                             slope=calibration_parameters$Calibration$Slope[1]))
+        }
+}
+
+mean_parameters_bootstrap <- data.frame(c_index=str_c(
+        round(mean(calibration_parameters_df$c_index),2)," (",
+        round(mean(calibration_parameters_df$c_index)-
+                      (sd(calibration_parameters_df$c_index)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$c_index)+
+                      (sd(calibration_parameters_df$c_index)*1.96),2),
+        ")"
+),
+intercept=str_c(
+        round(mean(calibration_parameters_df$intercept),2)," (",
+        round(mean(calibration_parameters_df$intercept)-
+                      (sd(calibration_parameters_df$intercept)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$intercept)+
+                      (sd(calibration_parameters_df$intercept)*1.96),2),
+        ")"
+),
+slope=str_c(
+        round(mean(calibration_parameters_df$slope),2)," (",
+        round(mean(calibration_parameters_df$slope)-
+                      (sd(calibration_parameters_df$slope)*1.96),2),
+        "-",
+        round(mean(calibration_parameters_df$slope)+
+                      (sd(calibration_parameters_df$slope)*1.96),2),
+        ")"
+)
+)
+                                    
+```
+

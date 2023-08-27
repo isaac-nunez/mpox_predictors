@@ -1,0 +1,536 @@
+---
+title: "mpox_t_neg_tables"
+author: "isaac núñez"
+date: "13/3/2023"
+output:
+  word_document: default
+  html_document: default
+---
+
+
+```{r first chunk, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+setwd("C:/Users/isaac/OneDrive/Documentos/Protocolos_de_investigacion/MONKEYPOX/MONKEYPOX V1/Test negative mpox/mpox_t_neg")
+
+library(tidyverse); library(lubridate); library(kableExtra); library(rms); library(readxl); library(stringr);library(dplyr);library(flextable);library(circlize);
+library(patchwork);library(rgdal)
+
+Sys.setlocale( category = "LC_ALL", locale = "english" )
+
+load("mpox_base_final.Rda")
+
+#Se carga con el nombre mpx_vf
+```
+
+
+```{r table 1 function, include = F, eval=T}
+mpx_vf <- filter(mpx_vf, diag_final==2|diag_final==3)
+
+
+table_var <- function(x, y=NULL){
+  if(is.numeric(x)){
+    str_c(median(x, na.rm = T), " (", fivenum(x, na.rm =T)[2], "-",fivenum(x, na.rm = T)[4], ")")
+  }else{
+    if(is.logical(x)){
+    str_c(sum(x, na.rm =T), " (", round((sum(x, na.rm =T)/length(x))*100, 1), "%)")    
+    }else{
+    str_c(sum(x==y, na.rm =T), " (", round((sum(x==y, na.rm =T)/length(x))*100, 1), "%)")  
+    }
+  }
+}
+```
+
+
+```{r table 1 build, include = F, eval=T}
+#In this part I filter mpx_vf based on the output I want: everyone, only msm, or only non-msm
+
+mpx_vf <- filter(mpx_vf,
+                 orient_sex=="hsh")
+
+table_1 <- data.frame(
+  variables=c("Number", "Age", "Biological sex:","Female", "Male", 
+              "Gender","-Man","-Woman","-Trans woman","-Non-binary","-Other",
+              "-Unspecified" ,
+              "Sexual orientation", "-MSM", "-Heterosexual", "-Lesbian","-Other",
+              "-Not specified",
+              "Mexican nationals", 
+              "Recent international travel","Health worker",
+              "Sex worker", "Prisoner",
+              "Possible transmission mechanism:",
+              "-Sexual contact", "-Non-sexual contact",
+              "-Healthcare (patient contact)", "Healthcare (laboratory exposure)",
+              "-Fomites","-Animal","-Other", "-Unknown",
+              "Number of self-reported contacts",
+              "Comorbidities:",
+              "-Diabetes","-Hypertension", "-Cancer",
+              "Sexually transmitted infections:",
+              "Hepatitis C","Syphilis","Chancroid", "Gonorrhea", "Chlamydia",
+              "Genital herpes", "HIV",
+              "CD4 cell count", "CD4 <200","N and % with CD4 count",
+              "Required hospitalization", "Required intensive care",
+              "Died"),
+  mpox_positive= c(table_var(mpx_vf$diag_final==2),
+             table_var(mpx_vf$edad_a[mpx_vf$diag_final==2]),
+             "-",
+             table_var(mpx_vf$sexo[mpx_vf$diag_final==2], y="fem"),
+             table_var(mpx_vf$sexo[mpx_vf$diag_final==2], y="masc"),
+             "-",
+             table_var(mpx_vf$genero[mpx_vf$diag_final==2],y= "masc"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==2],y= "fem"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==2],y= "trans"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==2],y= "no binario"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==2],y= "otro"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==2],y= "no especificado"),
+             "-",
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==2],y= "hsh"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==2],y= "hetero"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==2],y= "lesbiana"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==2],y= "otro"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==2],y= "no especificado"),
+             table_var(mpx_vf$mexican_national[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$international_travel[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$health_worker[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$sex_worker[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$prisoner[mpx_vf$diag_final==2]),
+             "-",
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], y="Sexual"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], 
+                       y="Persona a persona (Excepto las opciones anteriores)"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], 
+                       y="En los Servicios Salud"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], 
+                       y="Ocupacional en Laboratorio"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], y="Contacto con fomite"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], y="Animal"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], y="Otro"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==2], y="Desconocida"),
+             table_var(mpx_vf$num_contact_d[mpx_vf$diag_final==2]),
+             "-",
+             table_var(mpx_vf$comor_diabetes[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_hipertension[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_neoplasias[mpx_vf$diag_final==2]),
+             "-",
+             table_var(mpx_vf$comor_hepatitisc[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_sifilis[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_chancroide[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_gonorrea[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_clamidia[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_herpes[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$comor_vih[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$cd4_f[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$cd4_f[mpx_vf$diag_final==2]<200),
+             str_c(sum(!is.na(mpx_vf$cd4_f[mpx_vf$diag_final==2])), " (", round(sum(!is.na(mpx_vf$cd4_f[mpx_vf$diag_final==2]))
+                                                                                /nrow(mpx_vf[mpx_vf$diag_final==2,]),3)*100 ,"%)"),
+             table_var(mpx_vf$hospitalizado[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$cuid_intensiv[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$defuncion[mpx_vf$diag_final==2])
+              ),
+  mpox_negative= c(table_var(mpx_vf$diag_final==3),
+             table_var(mpx_vf$edad_a[mpx_vf$diag_final==3]),
+             "-",
+             table_var(mpx_vf$sexo[mpx_vf$diag_final==3], y="fem"),
+             table_var(mpx_vf$sexo[mpx_vf$diag_final==3], y="masc"),
+             "-",
+             table_var(mpx_vf$genero[mpx_vf$diag_final==3],y= "masc"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==3],y= "fem"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==3],y= "trans"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==3],y= "no binario"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==3],y= "otro"),
+             table_var(mpx_vf$genero[mpx_vf$diag_final==3],y= "no especificado"),
+             "-",
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==3],y= "hsh"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==3],y= "hetero"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==3],y= "lesbiana"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==3],y= "otro"),
+             table_var(mpx_vf$orient_sex[mpx_vf$diag_final==3],y= "no especificado"),
+             table_var(mpx_vf$mexican_national[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$international_travel[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$health_worker[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$sex_worker[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$prisoner[mpx_vf$diag_final==3]),
+             "-",
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], y="Sexual"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], 
+                       y="Persona a persona (Excepto las opciones anteriores)"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], 
+                       y="En los Servicios Salud"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], 
+                       y="Ocupacional en Laboratorio"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], y="Contacto con fomite"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], y="Animal"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], y="Otro"),
+             table_var(mpx_vf$mec_transm[mpx_vf$diag_final==3], y="Desconocida"),
+             table_var(mpx_vf$num_contact_d[mpx_vf$diag_final==3]),
+             "-",
+             table_var(mpx_vf$comor_diabetes[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_hipertension[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_neoplasias[mpx_vf$diag_final==3]),
+             "-",
+             table_var(mpx_vf$comor_hepatitisc[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_sifilis[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_chancroide[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_gonorrea[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_clamidia[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_herpes[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$comor_vih[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$cd4_f[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$cd4_f[mpx_vf$diag_final==3]<200),
+             str_c(sum(!is.na(mpx_vf$cd4_f[mpx_vf$diag_final==3])), " (", round(sum(!is.na(mpx_vf$cd4_f[mpx_vf$diag_final==3]))
+                                                                                /nrow(mpx_vf[mpx_vf$diag_final==3,]),3)*100 ,"%)"),
+             table_var(mpx_vf$hospitalizado[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$cuid_intensiv[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$defuncion[mpx_vf$diag_final==3])
+              ),
+  everyone= c(str_c(nrow(mpx_vf), " (100%)"),
+             table_var(mpx_vf$edad_a),
+             "-",
+             table_var(mpx_vf$sexo, y="fem"),
+             table_var(mpx_vf$sexo, y="masc"),
+             "-",
+             table_var(mpx_vf$genero,y= "masc"),
+             table_var(mpx_vf$genero,y= "fem"),
+             table_var(mpx_vf$genero,y= "trans"),
+             table_var(mpx_vf$genero,y= "no binario"),
+             table_var(mpx_vf$genero,y= "otro"),
+             table_var(mpx_vf$genero,y= "no especificado"),
+             "-",
+             table_var(mpx_vf$orient_sex,y= "hsh"),
+             table_var(mpx_vf$orient_sex,y= "hetero"),
+             table_var(mpx_vf$orient_sex,y= "lesbiana"),
+             table_var(mpx_vf$orient_sex,y= "otro"),
+             table_var(mpx_vf$orient_sex,y= "no especificado"),
+             table_var(mpx_vf$mexican_national),
+             table_var(mpx_vf$international_travel),
+             table_var(mpx_vf$health_worker),
+             table_var(mpx_vf$sex_worker),
+             table_var(mpx_vf$prisoner),
+             "-",
+             table_var(mpx_vf$mec_transm, y="Sexual"),
+             table_var(mpx_vf$mec_transm, 
+                       y="Persona a persona (Excepto las opciones anteriores)"),
+             table_var(mpx_vf$mec_transm, 
+                       y="En los Servicios Salud"),
+             table_var(mpx_vf$mec_transm, 
+                       y="Ocupacional en Laboratorio"),
+             table_var(mpx_vf$mec_transm, y="Contacto con fomite"),
+             table_var(mpx_vf$mec_transm, y="Animal"),
+             table_var(mpx_vf$mec_transm, y="Otro"),
+             table_var(mpx_vf$mec_transm, y="Desconocida"),
+             table_var(mpx_vf$num_contact_d),
+             "-",
+             table_var(mpx_vf$comor_diabetes),
+             table_var(mpx_vf$comor_hipertension),
+             table_var(mpx_vf$comor_neoplasias),
+             "-",
+             table_var(mpx_vf$comor_hepatitisc),
+             table_var(mpx_vf$comor_sifilis),
+             table_var(mpx_vf$comor_chancroide),
+             table_var(mpx_vf$comor_gonorrea),
+             table_var(mpx_vf$comor_clamidia),
+             table_var(mpx_vf$comor_herpes),
+             table_var(mpx_vf$comor_vih),
+             table_var(mpx_vf$cd4_f),
+             table_var(mpx_vf$cd4_f<200),
+             str_c(sum(!is.na(mpx_vf$cd4_f)), " (", round(sum(!is.na(mpx_vf$cd4_f))/nrow(mpx_vf),3)*100 ,"%)"),
+             table_var(mpx_vf$hospitalizado),
+             table_var(mpx_vf$cuid_intensiv),
+             table_var(mpx_vf$defuncion)
+              )
+)
+
+```
+
+
+```{r table 1 print, include = T}
+
+flextable(table_1)
+
+```
+
+
+```{r table 2 build, include = F}
+
+table_2 <- data.frame(
+  variables=c("Number", "Infection severity:","-Mild","-Moderate","-Severe",
+              "Debut clinical manifestation:", 
+              "-Rash","-Fever", "-Other symptoms",
+              "-Simultaneous rash and fever","-Simultaneous rash and other symptoms",
+              "-Simultaneous fever and other symptoms", 
+              "-Simultaneous rash, fever, and other symptoms",
+              "Rash", "Lymphadenopathies","Fever","Shivers", "Diaphoresis", 
+              "Headache", "Conjunctivitis", "Rinorrhea", "Otalgia", "Cough",
+              "Odynophagia", "Nausea","Vomit", "Artralgias", "Mialgias",
+              "Lumbalgia","Diarrhea", "Proctitis" , "Urethritis"),
+  mpox_confirmed= c(table_var(mpx_vf$diag_final==2), 
+             "-",
+             table_var(mpx_vf$severidad[mpx_vf$diag_final==2], y="leve"),
+             table_var(mpx_vf$severidad[mpx_vf$diag_final==2], y="moderada"),
+             table_var(mpx_vf$severidad[mpx_vf$diag_final==2], y="severa"),
+             "-",
+             table_var(mpx_vf$rash_first[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$fever_first[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$other_symptoms_first[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$rash_and_fever[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$other_symptoms_and_rash[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$other_symptoms_and_fever[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$other_symptoms_and_rash_and_fever[mpx_vf$diag_final==2]),
+             #####Término de subtabla
+             table_var(!is.na(mpx_vf$fecha_ini_exant)[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$lymph_nodes[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$fiebre[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$escalofrios[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$diaforesis[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$cefalea[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$conjuntivitis[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$rinorrea[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$otalgia[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$tos[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$odinofagia[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$nausea[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$vomito[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$artralgias[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$mialgias[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$lumbalgia[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$diarrea[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$proctitis[mpx_vf$diag_final==2]),
+             table_var(mpx_vf$uretritis[mpx_vf$diag_final==2])
+             ),
+  mpox_negative= c(table_var(mpx_vf$diag_final==3), 
+             "-",
+             table_var(mpx_vf$severidad[mpx_vf$diag_final==3], y="leve"),
+             table_var(mpx_vf$severidad[mpx_vf$diag_final==3], y="moderada"),
+             table_var(mpx_vf$severidad[mpx_vf$diag_final==3], y="severa"),
+             "-",
+             table_var(mpx_vf$rash_first[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$fever_first[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$other_symptoms_first[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$rash_and_fever[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$other_symptoms_and_rash[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$other_symptoms_and_fever[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$other_symptoms_and_rash_and_fever[mpx_vf$diag_final==3]),
+             #####Término de subtabla
+             table_var(!is.na(mpx_vf$fecha_ini_exant)[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$lymph_nodes[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$fiebre[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$escalofrios[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$diaforesis[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$cefalea[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$conjuntivitis[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$rinorrea[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$otalgia[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$tos[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$odinofagia[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$nausea[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$vomito[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$artralgias[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$mialgias[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$lumbalgia[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$diarrea[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$proctitis[mpx_vf$diag_final==3]),
+             table_var(mpx_vf$uretritis[mpx_vf$diag_final==3])
+             ),
+  everyone= c(str_c(nrow(mpx_vf), " (100%)"), 
+              "-",
+             table_var(mpx_vf$severidad, y="leve"),
+             table_var(mpx_vf$severidad, y="moderada"),
+             table_var(mpx_vf$severidad, y="severa"),
+             "-",
+             table_var(mpx_vf$rash_first),
+             table_var(mpx_vf$fever_first),
+             table_var(mpx_vf$other_symptoms_first),
+             table_var(mpx_vf$rash_and_fever),
+             table_var(mpx_vf$other_symptoms_and_rash),
+             table_var(mpx_vf$other_symptoms_and_fever),
+             table_var(mpx_vf$other_symptoms_and_rash_and_fever),
+             #####Término de subtabla
+             table_var(!is.na(mpx_vf$fecha_ini_exant)),
+             table_var(mpx_vf$lymph_nodes),
+             table_var(mpx_vf$fiebre),
+             table_var(mpx_vf$escalofrios),
+             table_var(mpx_vf$diaforesis),
+             table_var(mpx_vf$cefalea),
+             table_var(mpx_vf$conjuntivitis),
+             table_var(mpx_vf$rinorrea),
+             table_var(mpx_vf$otalgia),
+             table_var(mpx_vf$tos),
+             table_var(mpx_vf$odinofagia),
+             table_var(mpx_vf$nausea),
+             table_var(mpx_vf$vomito),
+             table_var(mpx_vf$artralgias),
+             table_var(mpx_vf$mialgias),
+             table_var(mpx_vf$lumbalgia),
+             table_var(mpx_vf$diarrea),
+             table_var(mpx_vf$proctitis),
+             table_var(mpx_vf$uretritis)
+  )
+)
+             
+#View(table_2)
+```
+
+
+```{r table 2 print, include = T}
+
+flextable(table_2)
+
+```
+
+
+
+```{r table 3 build, include = F}
+
+table_3 <- data.frame(
+  variables=c("Number", "Painful lesions", "Bleeding lesions",
+              "Rash extension:","-Limited", "-Diseminated", "-Generalized",
+              "Rash spread pattern:", 
+              "-Cephalocaudal", "-Centrifugal", "-Centripetal", "-Simultaneous", 
+              "-Other", "-Unspecified",
+              "Had lesion type:", 
+              "-Maculae", "-Papulae", "-Vesicle","-Pustule", "-Scab",
+              "Number of body areas with skin lesions",
+              "Rash affected the following area:",
+              "-Head", "-Face", "Mouth", "-Neck", "-Chest", "-Arms", "-Legs", "-Palms",
+              "-Soles","-Abdomen","-Back", "-Anogenital area",
+              "Lymphadenopathies", "Lymphadenopathies in the following regions:",
+              "-Cervical", "-Submandibular", "-Retroauricular", "-Axilar", "-Inguinal"
+              ),
+  mpox_confirmed=c(table_var(mpx_vf$diag_final==2),
+            table_var(mpx_vf$dolorosas[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$sangrantes[mpx_vf$diag_final==2]),
+            "-",
+            table_var(mpx_vf$extension_rash[mpx_vf$diag_final==2], y="limitado"),
+            table_var(mpx_vf$extension_rash[mpx_vf$diag_final==2], y="diseminado"),
+            table_var(mpx_vf$extension_rash[mpx_vf$diag_final==2], y="generalizado"),
+            "-",
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==2], y="Cefalocaudal"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==2], y="Centrífuga"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==2], y="Centrípeta"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==2], y="Simultánea"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==2], y="Otra"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==2], y="No Especificada"),
+            "-",
+            table_var(mpx_vf$exa_macula[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$exa_papula[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$exa_vesicula[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$exa_pustula[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$exa_costra[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$num_sitios_rash[mpx_vf$diag_final==2]),
+            "-",
+            table_var(mpx_vf$lexan_cabeza[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_cara[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_muc_oral[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_cuello[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_torax[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_miem_sup[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_miem_inf[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_palmas[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_plantas[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_abdomen[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_espalda[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lexan_anogenital[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$lymph_nodes[mpx_vf$diag_final==2]),
+            "-",
+            table_var(mpx_vf$linf_cervical[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$linf_mandibula[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$linf_retroauriculares[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$linf_axilar[mpx_vf$diag_final==2]),
+            table_var(mpx_vf$linf_inguinal[mpx_vf$diag_final==2])
+  ),
+  mpox_negative=c(table_var(mpx_vf$diag_final==3),
+            table_var(mpx_vf$dolorosas[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$sangrantes[mpx_vf$diag_final==3]),
+            "-",
+            table_var(mpx_vf$extension_rash[mpx_vf$diag_final==3], y="limitado"),
+            table_var(mpx_vf$extension_rash[mpx_vf$diag_final==3], y="diseminado"),
+            table_var(mpx_vf$extension_rash[mpx_vf$diag_final==3], y="generalizado"),
+            "-",
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==3], y="Cefalocaudal"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==3], y="Centrífuga"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==3], y="Centrípeta"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==3], y="Simultánea"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==3], y="Otra"),
+            table_var(mpx_vf$distrib_exa[mpx_vf$diag_final==3], y="No Especificada"),
+            "-",
+            table_var(mpx_vf$exa_macula[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$exa_papula[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$exa_vesicula[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$exa_pustula[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$exa_costra[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$num_sitios_rash[mpx_vf$diag_final==3]),
+            "-",
+            table_var(mpx_vf$lexan_cabeza[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_cara[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_muc_oral[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_cuello[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_torax[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_miem_sup[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_miem_inf[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_palmas[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_plantas[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_abdomen[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_espalda[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lexan_anogenital[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$lymph_nodes[mpx_vf$diag_final==3]),
+            "-",
+            table_var(mpx_vf$linf_cervical[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$linf_mandibula[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$linf_retroauriculares[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$linf_axilar[mpx_vf$diag_final==3]),
+            table_var(mpx_vf$linf_inguinal[mpx_vf$diag_final==3])
+  ),
+  everyone=c(str_c(nrow(mpx_vf), " (100%)"),
+            table_var(mpx_vf$dolorosas),
+            table_var(mpx_vf$sangrantes),
+            "-",
+            table_var(mpx_vf$extension_rash, y="limitado"),
+            table_var(mpx_vf$extension_rash, y="diseminado"),
+            table_var(mpx_vf$extension_rash, y="generalizado"),
+            "-",
+            table_var(mpx_vf$distrib_exa, y="Cefalocaudal"),
+            table_var(mpx_vf$distrib_exa, y="Centrífuga"),
+            table_var(mpx_vf$distrib_exa, y="Centrípeta"),
+            table_var(mpx_vf$distrib_exa, y="Simultánea"),
+            table_var(mpx_vf$distrib_exa, y="Otra"),
+            table_var(mpx_vf$distrib_exa, y="No Especificada"),
+            "-",
+            table_var(mpx_vf$exa_macula),
+            table_var(mpx_vf$exa_papula),
+            table_var(mpx_vf$exa_vesicula),
+            table_var(mpx_vf$exa_pustula),
+            table_var(mpx_vf$exa_costra),
+            table_var(mpx_vf$num_sitios_rash),
+            "-",
+            table_var(mpx_vf$lexan_cabeza),
+            table_var(mpx_vf$lexan_cara),
+            table_var(mpx_vf$lexan_muc_oral),
+            table_var(mpx_vf$lexan_cuello),
+            table_var(mpx_vf$lexan_torax),
+            table_var(mpx_vf$lexan_miem_sup),
+            table_var(mpx_vf$lexan_miem_inf),
+            table_var(mpx_vf$lexan_palmas),
+            table_var(mpx_vf$lexan_plantas),
+            table_var(mpx_vf$lexan_abdomen),
+            table_var(mpx_vf$lexan_espalda),
+            table_var(mpx_vf$lexan_anogenital),
+            table_var(mpx_vf$lymph_nodes),
+            "-",
+            table_var(mpx_vf$linf_cervical),
+            table_var(mpx_vf$linf_mandibula),
+            table_var(mpx_vf$linf_retroauriculares),
+            table_var(mpx_vf$linf_axilar),
+            table_var(mpx_vf$linf_inguinal)
+  )
+  
+)
+
+```
+
+
+```{r table 3 print, include = T}
+
+flextable(table_3)
+
+
+```
+
